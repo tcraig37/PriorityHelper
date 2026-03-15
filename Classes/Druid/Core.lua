@@ -24,14 +24,16 @@ local state = DH.State
 -- Simulated state for prediction (copy of real state values)
 local sim = {}
 local modeBearweave = false  -- Set by rotation mode before calling recommendations
-local SIM_GCD = 1.0  -- Feral GCD (1.0 sec with talents)
-local ENERGY_REGEN = 10  -- Energy per second
 local FUROR_ENERGY = 40  -- Energy from 5/5 Furor when shifting to cat
 
 -- Reset simulated state from real state
 local function ResetSimState(s)
-    sim.energy = s.energy.current
-    sim.rage = s.rage.current
+    -- Resources via framework
+    DH:SimInitEnergy(sim, s)
+    DH:SimInitRage(sim, s)
+    DH:SimInitGCD(sim, s, "melee")  -- Feral uses melee haste
+    DH:SimInitTarget(sim, s)
+
     sim.cp = s.combo_points.current
     sim.berserk = s.buff.berserk.up
     sim.clearcasting = s.buff.clearcasting.up
@@ -46,7 +48,6 @@ local function ResetSimState(s)
     sim.mangle_up = s.debuff.mangle.up
     sim.mangle_remains = s.debuff.mangle.remains
     sim.bleed_debuff_up = s.debuff.bleed_debuff.up  -- External Mangle/Trauma
-    sim.ttd = s.target.time_to_die
     sim.has_mangle_talent = s.talent.mangle.rank > 0
     sim.has_berserk_talent = s.talent.berserk.rank > 0
     sim.has_ooc_talent = s.talent.omen_of_clarity.rank > 0
@@ -65,10 +66,6 @@ local function ResetSimState(s)
     sim.lacerate_up = s.debuff.lacerate.up
     sim.lacerate_stacks = s.debuff.lacerate.stacks or 0
     sim.lacerate_remains = s.debuff.lacerate.remains
-
-    -- Use actual GCD from game state
-    sim.gcd = s.gcd or 1.0
-    sim.gcd_remains = s.gcd_remains or 0
 end
 
 -- ============================================================================
@@ -293,7 +290,8 @@ end
 local function SimulateTime(seconds)
     if seconds <= 0 then return end
 
-    sim.energy = math.min(100, sim.energy + (ENERGY_REGEN * seconds))
+    -- Energy regen via framework
+    DH:SimTickEnergy(sim, seconds)
 
     if sim.sr_remains > 0 then
         sim.sr_remains = sim.sr_remains - seconds
@@ -327,29 +325,10 @@ local function SimulateTime(seconds)
         end
     end
 
-    if sim.tf_cd_remains > 0 then
-        sim.tf_cd_remains = sim.tf_cd_remains - seconds
-        if sim.tf_cd_remains <= 0 then
-            sim.tf_ready = true
-            sim.tf_cd_remains = 0
-        end
-    end
-
-    if sim.ff_cd_remains > 0 then
-        sim.ff_cd_remains = sim.ff_cd_remains - seconds
-        if sim.ff_cd_remains <= 0 then
-            sim.ff_ready = true
-            sim.ff_cd_remains = 0
-        end
-    end
-
-    if sim.mangle_bear_cd_remains > 0 then
-        sim.mangle_bear_cd_remains = sim.mangle_bear_cd_remains - seconds
-        if sim.mangle_bear_cd_remains <= 0 then
-            sim.mangle_bear_ready = true
-            sim.mangle_bear_cd_remains = 0
-        end
-    end
+    -- Cooldown tick-downs via framework
+    DH:SimTickCD(sim, "tf_cd_remains", "tf_ready", seconds)
+    DH:SimTickCD(sim, "ff_cd_remains", "ff_ready", seconds)
+    DH:SimTickCD(sim, "mangle_bear_cd_remains", "mangle_bear_ready", seconds)
 
     if sim.lacerate_remains > 0 then
         sim.lacerate_remains = sim.lacerate_remains - seconds
@@ -382,7 +361,7 @@ local function SimulateAbility(action)
     local sr_cost = sim.berserk and 12 or 25
 
     if action == "tigers_fury" then
-        sim.energy = math.min(100, sim.energy + 60)
+        sim.energy = math.min(sim.energy_max, sim.energy + 60)
         sim.tf_ready = false
         sim.tf_cd_remains = 30
 
@@ -453,7 +432,7 @@ local function SimulateAbility(action)
         sim.in_cat = true
         sim.in_bear = false
         if sim.has_furor then
-            sim.energy = math.min(100, sim.energy + FUROR_ENERGY)
+            sim.energy = math.min(sim.energy_max, sim.energy + FUROR_ENERGY)
         end
 
     -- Bear abilities
@@ -479,7 +458,8 @@ local function SimulateAbility(action)
         if sim.clearcasting then sim.clearcasting = false end
     end
 
-    SimulateTime(1.0)
+    -- Advance by one GCD (haste-adjusted via framework)
+    SimulateTime(sim.gcd)
 end
 
 -- ============================================================================
@@ -526,7 +506,8 @@ local function GetFeralCatRecommendations(addon)
             SimulateAbility(action)
         else
             if sim.in_bear then
-                SimulateTime(1.0)
+                -- Wait at least one GCD in bear
+                SimulateTime(sim.gcd)
             else
                 local rake_cost = sim.berserk and 17 or 35
                 local mangle_cost = sim.berserk and 17 or 35
@@ -545,15 +526,16 @@ local function GetFeralCatRecommendations(addon)
                 if rake_needs_refresh then needed_energy = math.min(needed_energy, rake_cost) end
                 if rip_needs_refresh and sim.cp == 5 then needed_energy = math.min(needed_energy, rip_cost) end
 
-                local time_to_energy = math.max(0, (needed_energy - sim.energy) / ENERGY_REGEN)
-                SimulateTime(time_to_energy + 0.1)
+                local time_to_energy = math.max(0, (needed_energy - sim.energy) / sim.energy_regen)
+                -- Wait at least one GCD
+                SimulateTime(math.max(time_to_energy + 0.1, sim.gcd))
 
                 action = GetNextCatAbility()
                 if action then
                     addRec(action)
                     SimulateAbility(action)
                 else
-                    SimulateTime(1.0)
+                    SimulateTime(sim.gcd)
                 end
             end
         end
@@ -658,17 +640,15 @@ local bsim = {}  -- Balance simulated state
 local function ResetBalanceSim(s)
     local now = s.now
 
-    -- Haste-adjusted cast times and GCD
-    -- spell_haste is already computed as 1 + (haste% / 100) in State.lua
-    local haste = s.stat.spell_haste or 1
-    bsim.wrath_cast = 1.5 / haste       -- 1.5s base with 5/5 Starlight Wrath
-    bsim.starfire_cast = 3.0 / haste     -- 3.0s base with talents
-    bsim.gcd = math.max(1.0, 1.5 / haste)  -- GCD floor is 1.0s
-    bsim.gcd_remains = s.gcd_remains or 0
+    -- GCD + haste via framework (spell haste for Balance)
+    DH:SimInitGCD(bsim, s, "spell")
+    DH:SimInitTarget(bsim, s)
 
-    -- Haste-adjusted DoT durations (haste adds ticks in WotLK but doesn't change duration)
-    -- Moonfire: 12s base (15s with Nature's Splendor)
-    -- Insect Swarm: 12s base (14s with Nature's Splendor)
+    -- Haste-adjusted cast times
+    bsim.wrath_cast = DH:SimCastTime(bsim, 1.5)     -- 1.5s base with 5/5 Starlight Wrath
+    bsim.starfire_cast = DH:SimCastTime(bsim, 3.0)   -- 3.0s base with talents
+
+    -- DoT durations (haste adds ticks in WotLK but doesn't change duration)
     bsim.moonfire_duration = s.talent.natures_splendor and s.talent.natures_splendor.rank > 0 and 15 or 12
     bsim.is_duration = s.talent.natures_splendor and s.talent.natures_splendor.rank > 0 and 14 or 12
 
@@ -702,9 +682,6 @@ local function ResetBalanceSim(s)
     bsim.has_starfall = s.talent.starfall.rank > 0
     bsim.has_is = s.talent.insect_swarm.rank > 0
     bsim.has_imp_ff = s.talent.improved_faerie_fire.rank > 0
-
-    -- Target
-    bsim.ttd = s.target.time_to_die
 end
 
 -- Simulate time passing for balance
@@ -751,15 +728,9 @@ local function SimulateBalanceTime(seconds)
         if bsim.is_remains < 0 then bsim.is_remains = 0 end
     end
 
-    -- Tick down cooldowns
-    if bsim.fon_cd > 0 then
-        bsim.fon_cd = bsim.fon_cd - seconds
-        if bsim.fon_cd <= 0 then bsim.fon_ready = true; bsim.fon_cd = 0 end
-    end
-    if bsim.starfall_cd > 0 then
-        bsim.starfall_cd = bsim.starfall_cd - seconds
-        if bsim.starfall_cd <= 0 then bsim.starfall_ready = true; bsim.starfall_cd = 0 end
-    end
+    -- Tick down cooldowns via framework
+    DH:SimTickCD(bsim, "fon_cd", "fon_ready", seconds)
+    DH:SimTickCD(bsim, "starfall_cd", "starfall_ready", seconds)
 
     -- Tick down GCD
     if bsim.gcd_remains > 0 then

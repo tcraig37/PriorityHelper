@@ -2,6 +2,18 @@
 
 All notable changes to PriorityHelper will be documented in this file.
 
+## [1.1.5] - 2026-03-15
+
+### Changed
+- Druid Cat sim now uses framework: SimInitEnergy, SimInitGCD (melee haste),
+  SimInitRage, SimInitTarget, SimTickEnergy, SimTickCD
+- Druid Balance sim now uses framework: SimInitGCD (spell haste), SimCastTime,
+  SimInitTarget, SimTickCD
+- Cat GCD now haste-adjusted (was hardcoded 1.0s)
+- Cat energy wait accounts for GCD minimum
+- Energy cap uses sim.energy_max instead of hardcoded 100
+- All CD tick-downs use SimTickCD helper
+
 ## [1.1.4] - 2026-03-15
 
 ### Added
