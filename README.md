@@ -10,6 +10,10 @@ A priority rotation helper addon for World of Warcraft 3.3.5a (WotLK). Shows rec
 - **Bear (Tank)** — Bear tank rotation with Lacerate/Mangle priority
 - **Boomkin (DPS)** — Balance rotation with ICD-aware Eclipse fishing (based on wowsim APL)
 
+### Paladin
+- **Retribution (DPS)** — FCFS rotation: HoW > Judgement > CS > DS > Exorcism (AoW) > Consecration
+- **Protection (Tank)** — SoR/HotR interleave with Consecration, Holy Shield, and Judgement fill
+
 ## Installation
 
 1. Download or clone this repository

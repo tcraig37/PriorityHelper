@@ -10,4 +10,6 @@ State.lua
 UI.lua
 Classes\Druid\Druid.lua
 Classes\Druid\Core.lua
+Classes\Paladin\Paladin.lua
+Classes\Paladin\Core.lua
 Config.lua

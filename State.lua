@@ -204,20 +204,37 @@ function state:Reset()
     self.inCombat = UnitAffectingCombat("player")
     ns.inCombat = self.inCombat
 
-    -- Update GCD using registered spell
+    -- Update GCD
+    -- GetSpellCooldown returns (start, duration) — if a spell has no real CD,
+    -- it returns the GCD. If it has a real CD, it returns whichever is longer.
+    -- We check the registered GCD spell first. If it reports a long CD (it has
+    -- a real cooldown), we scan registered cooldowns to find one that's only on GCD.
+    self.gcd = 1.5
+    self.gcd_remains = 0
+    self._gcd_start = 0
+
     local gcdSpellId = ns.registered.gcdSpellId
+    local gcdStart, gcdDuration
+
     if gcdSpellId then
-        local gcdStart, gcdDuration = GetSpellCooldown(gcdSpellId)
-        if gcdStart and gcdStart > 0 then
-            self.gcd = gcdDuration
-            self.gcd_remains = math.max(0, gcdStart + gcdDuration - self.now)
-        else
-            self.gcd = 1.5
-            self.gcd_remains = 0
+        gcdStart, gcdDuration = GetSpellCooldown(gcdSpellId)
+    end
+
+    -- If the reference spell is on a real CD (> 2s), find a spell that's only on GCD
+    if not gcdStart or not gcdDuration or gcdDuration > 2 then
+        for _, spellId in pairs(ns.registered.cooldowns) do
+            local s, d = GetSpellCooldown(spellId)
+            if s and s > 0 and d and d > 0 and d <= 2 then
+                gcdStart, gcdDuration = s, d
+                break
+            end
         end
-    else
-        self.gcd = 1.5
-        self.gcd_remains = 0
+    end
+
+    if gcdStart and gcdStart > 0 and gcdDuration and gcdDuration > 0 and gcdDuration <= 2 then
+        self.gcd = gcdDuration  -- Actual GCD (affected by haste)
+        self.gcd_remains = math.max(0, gcdStart + gcdDuration - self.now)
+        self._gcd_start = gcdStart
     end
 
     -- Update resources
@@ -401,10 +418,15 @@ function state:UpdateBuffs()
 
         local key = ns.registered.buffMap[spellId]
         if key and self.buff[key] then
-            self.buff[key].expires = expirationTime or (self.now + 3600)
+            -- Permanent buffs (Righteous Fury, auras, etc.) have expirationTime = 0
+            if not expirationTime or expirationTime == 0 then
+                self.buff[key].expires = self.now + 7200  -- Treat as 2 hours
+            else
+                self.buff[key].expires = expirationTime
+            end
             self.buff[key].count = count or 1
             self.buff[key]._duration = duration or 0
-            self.buff[key].applied = expirationTime and (expirationTime - duration) or self.now
+            self.buff[key].applied = (expirationTime and expirationTime > 0) and (expirationTime - (duration or 0)) or self.now
         end
     end
 end
@@ -473,11 +495,25 @@ end
 -- ============================================================================
 
 function state:UpdateCooldowns()
+    local gcdStart = self._gcd_start or 0
+    local gcdDuration = self.gcd or 1.5
+
     for key, spellId in pairs(ns.registered.cooldowns) do
         local start, duration, enabled = GetSpellCooldown(spellId)
         if self.cooldown[key] then
-            -- Filter out GCD
-            if duration and duration > 1.5 then
+            -- Filter out GCD: if this spell shares the same start time and duration
+            -- as the GCD, it's just on GCD with no real cooldown.
+            -- Also filter if duration matches GCD duration (haste-adjusted).
+            local isJustGCD = false
+            if start and duration then
+                if start == gcdStart and math.abs(duration - gcdDuration) < 0.01 then
+                    isJustGCD = true
+                elseif duration <= gcdDuration + 0.01 then
+                    isJustGCD = true
+                end
+            end
+
+            if not isJustGCD and duration and duration > 0 then
                 self.cooldown[key].start = start or 0
                 self.cooldown[key].duration = duration or 0
             else
