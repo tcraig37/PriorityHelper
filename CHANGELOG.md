@@ -2,6 +2,23 @@
 
 All notable changes to PriorityHelper will be documented in this file.
 
+## [1.1.2] - 2026-03-15
+
+### Added
+- Balance Druid simulation system: predicts 3 GCDs ahead like Feral Cat
+- Haste-adjusted cast times (Wrath, Starfire) and GCD in Balance sim
+- Nature's Splendor talent support for DoT duration (Moonfire 15s, IS 14s)
+- Eclipse ICD simulation: properly tracks Lunar ICD through Eclipse expiry
+
+### Fixed
+- Balance DoTs no longer flicker — simulation predicts when they'll expire
+- Insect Swarm now properly recommended when down (removed overly strict ICD gate)
+- Moonfire/IS refresh timing matches wowhead guide ("allow to fall off before reapplying")
+
+### Changed
+- Balance rotation rewritten with full simulation (was static priority checks)
+- DoT refresh threshold tightened to < 1s remaining (from < 3s pandemic window)
+
 ## [1.1.1] - 2026-03-15
 
 ### Fixed

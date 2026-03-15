@@ -647,25 +647,216 @@ end
 -- BALANCE (MOONKIN) ROTATION
 -- ============================================================================
 
--- Balance rotation based on WotLK sim APL (wowsim/wotlk)
---
--- Eclipse ICD system:
---   Lunar Eclipse (48518) - proc'd by Wrath crit, buffs Starfire crit +40
---   Solar Eclipse (48517) - proc'd by Starfire crit, buffs Wrath damage +40%
---   30 second ICD between eclipse procs
---
--- Core fishing logic:
---   When NO eclipse is active:
---     - If Lunar ICD is ready → cast Wrath to fish for Lunar proc
---     - If Lunar ICD is NOT ready → cast Starfire to fish for Solar proc
---   When eclipse IS active:
---     - Lunar Eclipse → spam Starfire (it's buffed)
---     - Solar Eclipse → spam Wrath (it's buffed)
---
--- DoT management:
---   - Moonfire: maintain when not active (instant, always worth it)
---   - Insect Swarm: only refresh during Lunar ICD downtime (don't waste GCDs while fishing)
---
+-- ============================================================================
+-- BALANCE SIMULATION
+-- Same approach as cat: copy state, get next ability, simulate, repeat for 3
+-- ============================================================================
+
+local bsim = {}  -- Balance simulated state
+
+-- Reset balance sim from real state
+local function ResetBalanceSim(s)
+    local now = s.now
+
+    -- Haste-adjusted cast times and GCD
+    -- spell_haste is already computed as 1 + (haste% / 100) in State.lua
+    local haste = s.stat.spell_haste or 1
+    bsim.wrath_cast = 1.5 / haste       -- 1.5s base with 5/5 Starlight Wrath
+    bsim.starfire_cast = 3.0 / haste     -- 3.0s base with talents
+    bsim.gcd = math.max(1.0, 1.5 / haste)  -- GCD floor is 1.0s
+    bsim.gcd_remains = s.gcd_remains or 0
+
+    -- Haste-adjusted DoT durations (haste adds ticks in WotLK but doesn't change duration)
+    -- Moonfire: 12s base (15s with Nature's Splendor)
+    -- Insect Swarm: 12s base (14s with Nature's Splendor)
+    bsim.moonfire_duration = s.talent.natures_splendor and s.talent.natures_splendor.rank > 0 and 15 or 12
+    bsim.is_duration = s.talent.natures_splendor and s.talent.natures_splendor.rank > 0 and 14 or 12
+
+    -- Eclipse state
+    bsim.lunar_up = s.buff.eclipse_lunar.up
+    bsim.lunar_remains = s.buff.eclipse_lunar.remains
+    bsim.solar_up = s.buff.eclipse_solar.up
+    bsim.solar_remains = s.buff.eclipse_solar.remains
+
+    -- ICD tracking
+    bsim.lunar_icd_ready = s.buff.eclipse_lunar.last_applied == 0
+        or (now - s.buff.eclipse_lunar.last_applied) >= 30
+    bsim.lunar_icd_remains = 0
+    if not bsim.lunar_icd_ready and s.buff.eclipse_lunar.last_applied > 0 then
+        bsim.lunar_icd_remains = 30 - (now - s.buff.eclipse_lunar.last_applied)
+    end
+
+    -- DoT tracking
+    bsim.moonfire_remains = s.debuff.moonfire.remains
+    bsim.is_remains = s.debuff.insect_swarm.remains
+    bsim.ff_up = s.debuff.faerie_fire.up
+
+    -- Cooldowns
+    bsim.fon_ready = s.cooldown.force_of_nature.ready and not DH:IsSnoozed("force_of_nature")
+    bsim.fon_cd = s.cooldown.force_of_nature.remains
+    bsim.starfall_ready = s.cooldown.starfall.ready and not DH:IsSnoozed("starfall")
+    bsim.starfall_cd = s.cooldown.starfall.remains
+
+    -- Talents
+    bsim.has_fon = s.talent.force_of_nature.rank > 0
+    bsim.has_starfall = s.talent.starfall.rank > 0
+    bsim.has_is = s.talent.insect_swarm.rank > 0
+    bsim.has_imp_ff = s.talent.improved_faerie_fire.rank > 0
+
+    -- Target
+    bsim.ttd = s.target.time_to_die
+end
+
+-- Simulate time passing for balance
+local function SimulateBalanceTime(seconds)
+    if seconds <= 0 then return end
+
+    -- Tick down Eclipse buffs
+    if bsim.lunar_remains > 0 then
+        bsim.lunar_remains = bsim.lunar_remains - seconds
+        if bsim.lunar_remains <= 0 then
+            bsim.lunar_up = false
+            bsim.lunar_remains = 0
+            -- Lunar Eclipse just ended — ICD is now active (30s from when it proc'd)
+            -- Since it just fell off, most of the ICD has already elapsed
+            -- but we can't proc it again immediately
+            bsim.lunar_icd_ready = false
+            bsim.lunar_icd_remains = 15  -- ~15s left on ICD after 15s Eclipse
+        end
+    end
+    if bsim.solar_remains > 0 then
+        bsim.solar_remains = bsim.solar_remains - seconds
+        if bsim.solar_remains <= 0 then
+            bsim.solar_up = false
+            bsim.solar_remains = 0
+        end
+    end
+
+    -- Tick down ICD
+    if bsim.lunar_icd_remains > 0 then
+        bsim.lunar_icd_remains = bsim.lunar_icd_remains - seconds
+        if bsim.lunar_icd_remains <= 0 then
+            bsim.lunar_icd_ready = true
+            bsim.lunar_icd_remains = 0
+        end
+    end
+
+    -- Tick down DoTs
+    if bsim.moonfire_remains > 0 then
+        bsim.moonfire_remains = bsim.moonfire_remains - seconds
+        if bsim.moonfire_remains < 0 then bsim.moonfire_remains = 0 end
+    end
+    if bsim.is_remains > 0 then
+        bsim.is_remains = bsim.is_remains - seconds
+        if bsim.is_remains < 0 then bsim.is_remains = 0 end
+    end
+
+    -- Tick down cooldowns
+    if bsim.fon_cd > 0 then
+        bsim.fon_cd = bsim.fon_cd - seconds
+        if bsim.fon_cd <= 0 then bsim.fon_ready = true; bsim.fon_cd = 0 end
+    end
+    if bsim.starfall_cd > 0 then
+        bsim.starfall_cd = bsim.starfall_cd - seconds
+        if bsim.starfall_cd <= 0 then bsim.starfall_ready = true; bsim.starfall_cd = 0 end
+    end
+
+    -- Tick down GCD
+    if bsim.gcd_remains > 0 then
+        bsim.gcd_remains = bsim.gcd_remains - seconds
+        if bsim.gcd_remains < 0 then bsim.gcd_remains = 0 end
+    end
+end
+
+-- Simulate casting a balance ability
+local function SimulateBalanceAbility(action)
+    if action == "moonfire" then
+        bsim.moonfire_remains = bsim.moonfire_duration
+        SimulateBalanceTime(bsim.gcd)
+
+    elseif action == "insect_swarm" then
+        bsim.is_remains = bsim.is_duration
+        SimulateBalanceTime(bsim.gcd)
+
+    elseif action == "starfire" then
+        SimulateBalanceTime(bsim.starfire_cast)
+
+    elseif action == "wrath" then
+        SimulateBalanceTime(bsim.wrath_cast)
+
+    elseif action == "force_of_nature" then
+        bsim.fon_ready = false
+        bsim.fon_cd = 180
+        SimulateBalanceTime(bsim.gcd)
+
+    elseif action == "starfall" then
+        bsim.starfall_ready = false
+        bsim.starfall_cd = 90
+        SimulateBalanceTime(bsim.gcd)
+
+    elseif action == "faerie_fire" then
+        bsim.ff_up = true
+        SimulateBalanceTime(bsim.gcd)
+    end
+end
+
+-- Get the next balance ability based on simulated state
+local function GetNextBalanceAbility()
+    local eclipseActive = bsim.lunar_up or bsim.solar_up
+
+    -- Determine spam spell based on eclipse / ICD state
+    local spamSpell
+    if bsim.lunar_up then
+        spamSpell = "starfire"
+    elseif bsim.solar_up then
+        spamSpell = "wrath"
+    elseif not bsim.lunar_icd_ready then
+        spamSpell = "starfire"   -- Fish for Solar
+    else
+        spamSpell = "wrath"      -- Fish for Lunar
+    end
+
+    -- During Eclipse: only interrupt for Moonfire refresh
+    -- Use small buffer so it shows the GCD before it actually expires
+    if eclipseActive then
+        if bsim.moonfire_remains < 1 and bsim.ttd > 6 then
+            return "moonfire"
+        end
+        return spamSpell
+    end
+
+    -- Outside Eclipse priority:
+
+    -- 1. Force of Nature
+    if bsim.has_fon and bsim.fon_ready and bsim.ttd > 20 then
+        return "force_of_nature"
+    end
+
+    -- 2. Starfall
+    if bsim.has_starfall and bsim.starfall_ready then
+        return "starfall"
+    end
+
+    -- 3. Faerie Fire
+    if bsim.has_imp_ff and not bsim.ff_up then
+        return "faerie_fire"
+    end
+
+    -- 4. Moonfire (reapply when about to fall off — 1s buffer for anticipation)
+    if bsim.moonfire_remains < 1 and bsim.ttd > 6 then
+        return "moonfire"
+    end
+
+    -- 5. Insect Swarm (reapply when about to fall off)
+    if bsim.has_is and bsim.is_remains < 1 and bsim.ttd > 6 then
+        return "insect_swarm"
+    end
+
+    -- 6. Primary nuke (fishing)
+    return spamSpell
+end
+
+-- Main balance recommendation function with simulation
 local function GetBalanceRecommendations(addon)
     local recommendations = {}
     local s = state
@@ -686,82 +877,21 @@ local function GetBalanceRecommendations(addon)
         return #recommendations >= 3
     end
 
-    -- Eclipse state
-    local lunar_up = s.buff.eclipse_lunar.up        -- Wrath crit'd → Starfire buffed
-    local solar_up = s.buff.eclipse_solar.up         -- Starfire crit'd → Wrath buffed
-    local now = s.now
+    -- Initialize sim from real state
+    ResetBalanceSim(s)
 
-    -- ICD tracking: can we proc Lunar Eclipse? (30s ICD from last proc)
-    local lunar_icd_ready = s.buff.eclipse_lunar.last_applied == 0
-        or (now - s.buff.eclipse_lunar.last_applied) >= 30
-
-    -- Determine the primary nuke based on Eclipse state
-    local eclipseActive = lunar_up or solar_up
-    local spamSpell = nil
-
-    if lunar_up then
-        spamSpell = "starfire"   -- Lunar Eclipse → Starfire buffed
-    elseif solar_up then
-        spamSpell = "wrath"      -- Solar Eclipse → Wrath buffed
-    elseif not lunar_icd_ready then
-        spamSpell = "starfire"   -- Fish for Solar with Starfire
-    else
-        spamSpell = "wrath"      -- Fish for Lunar with Wrath
+    -- Account for current GCD
+    if bsim.gcd_remains > 0 then
+        SimulateBalanceTime(bsim.gcd_remains)
     end
 
-    -- Pandemic-style DoT tracking (same approach as cat rotation)
-    -- Use a wider window during Eclipse so the player can anticipate the refresh
-    -- instead of it suddenly appearing mid-spam
-    local moonfire_remains = s.debuff.moonfire.remains
-    local is_remains = s.debuff.insect_swarm.remains
-    local dot_refresh_window = eclipseActive and 5 or 3  -- Wider window during Eclipse
-    local moonfire_needs_refresh = moonfire_remains < dot_refresh_window and s.target.time_to_die > 6
-    local is_needs_refresh = is_remains < dot_refresh_window and s.target.time_to_die > 6
-
-    -- During Eclipse: spam the buffed spell, refresh Moonfire if in pandemic window
-    if eclipseActive then
-        if moonfire_needs_refresh then
-            addRec("moonfire")
+    -- Simulate 3 GCDs ahead
+    for i = 1, 3 do
+        local action = GetNextBalanceAbility()
+        if action then
+            addRec(action)
+            SimulateBalanceAbility(action)
         end
-
-        while #recommendations < 3 do
-            addRec(spamSpell)
-        end
-        return recommendations
-    end
-
-    -- NO ECLIPSE: normal priority
-
-    -- 1. Force of Nature off CD (snoozeable)
-    if s.talent.force_of_nature.rank > 0 and s.cooldown.force_of_nature.ready
-        and s.target.time_to_die > 20 and not DH:IsSnoozed("force_of_nature") then
-        if addRec("force_of_nature") then return recommendations end
-    end
-
-    -- 2. Starfall off CD (snoozeable)
-    if s.talent.starfall.rank > 0 and s.cooldown.starfall.ready
-        and not DH:IsSnoozed("starfall") then
-        if addRec("starfall") then return recommendations end
-    end
-
-    -- 3. Faerie Fire if Improved FF talented and not on target
-    if s.talent.improved_faerie_fire.rank > 0 and not s.debuff.faerie_fire.up then
-        if addRec("faerie_fire") then return recommendations end
-    end
-
-    -- 4. Moonfire if in pandemic window (< 3s remaining)
-    if moonfire_needs_refresh then
-        if addRec("moonfire") then return recommendations end
-    end
-
-    -- 5. Insect Swarm in pandemic window, only when Lunar ICD is NOT ready
-    if s.talent.insect_swarm.rank > 0 and is_needs_refresh and not lunar_icd_ready then
-        if addRec("insect_swarm") then return recommendations end
-    end
-
-    -- 6. Primary nuke (fishing spell) fills remaining slots
-    while #recommendations < 3 do
-        addRec(spamSpell)
     end
 
     return recommendations
