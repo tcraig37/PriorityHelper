@@ -14,7 +14,7 @@ Priority rotation helper for World of Warcraft 3.3.5a (WotLK). Shows the next 3 
 | Hunter | Beast Mastery, Marksmanship, Survival |
 | Death Knight | Blood, Frost, Unholy |
 | Rogue | Assassination, Combat, Subtlety |
-| Mage | Arcane, Fire, Frost |
+| Mage | Arcane, Fire, Frost (needs TLC) |
 | Priest | Shadow |
 
 ## Install
