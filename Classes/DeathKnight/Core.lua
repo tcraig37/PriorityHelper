@@ -233,19 +233,25 @@ local bloodConfig = {
             return "plague_strike"
         end
 
+        -- Death Strike (primary survival tool, Frost+Unholy) - only with diseases
+        if diseasesUp(sim) and canAfford(sim, 0, 1, 1) then
+            return "death_strike"
+        end
+
         -- Dancing Rune Weapon (major tank CD)
         if sim.has_drw and sim:ready("dancing_rune_weapon") and not DH:IsSnoozed("dancing_rune_weapon") and sim.rp >= 60 then
             return "dancing_rune_weapon"
         end
 
-        -- Death Strike (heal + damage, Frost+Unholy) - only with diseases
-        if diseasesUp(sim) and canAfford(sim, 0, 1, 1) then
-            return "death_strike"
-        end
-
         -- Heart Strike (Blood rune, main threat) - only with diseases
         if sim.has_heart_strike and diseasesUp(sim) and canAfford(sim, 1, 0, 0) then
             return "heart_strike"
+        end
+
+        -- Blood Tap: convert Blood to Death when F/U depleted and ERW not ready
+        if sim.blood > 0 and sim.frost == 0 and sim.unholy == 0 and sim.death == 0
+            and not sim:ready("empower_rune_weapon") then
+            return "blood_tap"
         end
 
         -- Sudden Doom proc: free Death Coil
@@ -289,6 +295,11 @@ local bloodConfig = {
             sim.sudden_doom = false
         elseif key == "dancing_rune_weapon" then
             spendRP(sim, 60)
+        elseif key == "blood_tap" then
+            if sim.blood > 0 then
+                sim.blood = sim.blood - 1
+                sim.death = sim.death + 1
+            end
         elseif key == "empower_rune_weapon" then
             sim.blood = 2
             sim.frost = 2
@@ -421,9 +432,20 @@ local frostConfig = {
             return "blood_strike"
         end
 
+        -- Blood Tap: convert Blood rune to Death when F/U depleted
+        if sim.blood > 0 and sim.frost == 0 and sim.unholy == 0 and sim.death == 0 then
+            return "blood_tap"
+        end
+
         -- Frost Strike (RP dump)
         if sim.has_frost_strike and sim.rp >= sim.fs_cost then
             return "frost_strike"
+        end
+
+        -- Empower Rune Weapon (all runes depleted, big CD)
+        local totalRunes = sim.blood + sim.frost + sim.unholy + sim.death
+        if totalRunes == 0 and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
+            return "empower_rune_weapon"
         end
 
         -- Horn of Winter (free GCD, RP gen)
@@ -454,6 +476,11 @@ local frostConfig = {
             spendRunesTracked(sim, 1, 0, 0, 10)
         elseif key == "frost_strike" then
             spendRP(sim, sim.fs_cost)
+        elseif key == "blood_tap" then
+            if sim.blood > 0 then
+                sim.blood = sim.blood - 1
+                sim.death = sim.death + 1
+            end
         elseif key == "empower_rune_weapon" then
             sim.blood = 2
             sim.frost = 2
@@ -573,6 +600,11 @@ local unholyConfig = {
             return "blood_strike"
         end
 
+        -- Blood Tap: convert Blood rune to Death when F/U depleted
+        if sim.blood > 0 and sim.frost == 0 and sim.unholy == 0 and sim.death == 0 then
+            return "blood_tap"
+        end
+
         -- Sudden Doom proc: free Death Coil
         if sim.sudden_doom then
             return "death_coil"
@@ -613,6 +645,11 @@ local unholyConfig = {
             sim.sudden_doom = false
         elseif key == "summon_gargoyle" then
             spendRP(sim, 60)
+        elseif key == "blood_tap" then
+            if sim.blood > 0 then
+                sim.blood = sim.blood - 1
+                sim.death = sim.death + 1
+            end
         elseif key == "empower_rune_weapon" then
             sim.blood = 2
             sim.frost = 2

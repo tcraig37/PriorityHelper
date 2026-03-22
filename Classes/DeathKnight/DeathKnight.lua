@@ -46,6 +46,7 @@ local SPELLS = {
     MARK_OF_BLOOD = 49005,
 
     -- Shared
+    BLOOD_TAP = 45529,
     HORN_OF_WINTER = 57623,
     EMPOWER_RUNE_WEAPON = 47568,
     RUNE_STRIKE = 56815,
@@ -167,6 +168,11 @@ class.abilities = {
     },
 
     -- Shared
+    blood_tap = {
+        id = SPELLS.BLOOD_TAP,
+        name = "Blood Tap",
+        texture = 237515,
+    },
     horn_of_winter = {
         id = SPELLS.HORN_OF_WINTER,
         name = "Horn of Winter",
@@ -311,6 +317,7 @@ DH:RegisterCooldowns({
     blood_boil = 49941,
     pestilence = 50842,
     death_and_decay = 49938,
+    blood_tap = 45529,
     horn_of_winter = 57623,
     empower_rune_weapon = 47568,
     summon_gargoyle = 49206,
