@@ -2,6 +2,25 @@
 
 All notable changes to PriorityHelper will be documented in this file.
 
+## [1.3.0] - 2026-03-22
+
+### Added
+- **Warlock support**: Affliction, Demonology, Destruction rotation modes
+- Affliction: Haunt on CD, Corruption/UA/CoA maintenance, Drain Soul execute, Nightfall procs, Shadow Bolt filler
+- Demonology: Metamorphosis + Immolation Aura, Demonic Empowerment on CD, Decimation proc Soul Fire, Molten Core proc Incinerate
+- Destruction: Immolate engine, Conflagrate (triggers Backdraft), Chaos Bolt, Incinerate filler with Backdraft cast reduction
+- All Warlock specs: Life Tap mana management, Glyph of Life Tap buff uptime
+- Cast time awareness: sim reads UnitCastingInfo/UnitChannelInfo and advances past in-progress casts before picking recommendations
+- Detachable minimap button: right-click to toggle free movement, right-click again to reattach
+
+### Fixed
+- Caster sim predictions now use haste-adjusted cast times (was using raw base cast times)
+- Duplicate icon bug when CreateMinimapButton called twice
+- Demonic Empowerment no longer snoozeable (core rotational ability)
+
+### Changed
+- Core RunSimulation accounts for cast_remains (longer casts like Shadow Bolt) in addition to gcd_remains
+
 ## [1.2.0] - 2026-03-21
 
 ### Added
