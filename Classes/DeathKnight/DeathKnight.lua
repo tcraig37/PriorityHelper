@@ -199,6 +199,13 @@ class.abilities = {
         texture = 132728,
     },
 
+    -- Off-GCD
+    rune_strike = {
+        id = SPELLS.RUNE_STRIKE,
+        name = "Rune Strike",
+        texture = 237518,
+    },
+
     -- Presences
     blood_presence = {
         id = SPELLS.BLOOD_PRESENCE,
@@ -437,6 +444,7 @@ DH:RegisterGlyphs({
     [58680] = "rune_strike",
     [63334] = "dancing_rune_weapon",
     [58673] = "disease",
+    [63334] = "disease",
     [58676] = "horn_of_winter",
 })
 
@@ -577,3 +585,4 @@ ns.registered.debugFrameUpdater = function()
     ns.DebugFrame.text:SetText(table.concat(lines, "\n"))
     ns.DebugFrame:Show()
 end
+

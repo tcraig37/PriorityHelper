@@ -580,8 +580,8 @@ function state:UpdateGlyphs()
 
     -- Scan equipped glyphs (3.3.5a has 6 glyph slots)
     for i = 1, 6 do
-        local enabled, glyphType, glyphTooltipIndex, glyphSpell, icon = GetGlyphSocketInfo(i)
-        if enabled and glyphSpell then
+        local enabled, glyphType, glyphSpell, icon = GetGlyphSocketInfo(i)
+        if enabled and glyphSpell and type(glyphSpell) == "number" then
             local key = ns.registered.glyphs[glyphSpell]
             if key then
                 self.glyph[key] = { enabled = true }
