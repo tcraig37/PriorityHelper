@@ -214,96 +214,70 @@ end
 local smoothState = {
     abilities = {},     -- { [slot] = abilityKey }
     changeTime = {},    -- { [slot] = GetTime() when this slot last changed }
-    prevSlots = {},     -- { [ability] = slot } from previous frame
 }
 local SMOOTH_LOCK_DURATION = 0.5
 
 local function SmoothRecommendations(newRecs)
-    -- Build lookup of new recommendations
-    local newByAbility = {}
-    for j = 1, #newRecs do
-        if newRecs[j] then newByAbility[newRecs[j].ability] = newRecs[j] end
-    end
+    local now = GetTime()
+    local smoothed = {}
+    local used = {}  -- Prevent same ability in multiple slots
 
-    -- Previous frame's slot assignments
-    local prev = smoothState.prevSlots or {}  -- { [ability] = slotNumber }
-
-    -- Step 1: For each ability in the new recs, determine its target slot.
-    -- Rule: an ability can stay in place, move forward (toward Rec1), or be new.
-    -- It can NEVER move backward.
-    local result = { nil, nil, nil }
-    local used = {}
-
-    -- First pass: place abilities that were in the previous frame,
-    -- only if they stay in place or move forward (toward Rec1).
-    -- If the sim wants to move an ability backward, skip it — it will
-    -- be replaced by something new or another ability sliding forward.
     for i = 1, 3 do
-        local newAb = newRecs[i] and newRecs[i].ability or nil
-        if newAb and prev[newAb] and not used[newAb] then
-            local prevSlot = prev[newAb]
-            if i <= prevSlot and not result[i] then
-                result[i] = newRecs[i]
-                used[newAb] = true
+        local newAbility = newRecs[i] and newRecs[i].ability or nil
+        local oldAbility = smoothState.abilities[i]
+        local lastChange = smoothState.changeTime[i] or 0
+        local locked = (now - lastChange) < SMOOTH_LOCK_DURATION
+
+        -- Slot 1: always follow the sim — this is what to press NOW
+        if i == 1 or newAbility == oldAbility or not oldAbility or not locked then
+            smoothed[i] = newRecs[i]
+            if newAbility then used[newAbility] = true end
+            if newAbility ~= oldAbility then
+                smoothState.abilities[i] = newAbility
+                smoothState.changeTime[i] = now
             end
-        end
-    end
+        else
+            -- Slots 2-3 locked: keep old ability if still recommended AND not already used
+            local oldStillValid = false
+            if not used[oldAbility] then
+                for j = 1, #newRecs do
+                    if newRecs[j].ability == oldAbility then
+                        oldStillValid = true
+                        break
+                    end
+                end
+            end
 
-    -- Second pass: fill empty slots with unused abilities.
-    -- Only allow an ability if it's new (not in previous frame) or
-    -- if this slot is same/better than its previous slot (no backward).
-    for i = 1, 3 do
-        if not result[i] then
-            -- Try the sim's recommendation for this slot first
-            local newAb = newRecs[i] and newRecs[i].ability or nil
-            if newAb and not used[newAb] and (not prev[newAb] or i <= prev[newAb]) then
-                result[i] = newRecs[i]
-                used[newAb] = true
+            if oldStillValid then
+                for j = 1, #newRecs do
+                    if newRecs[j].ability == oldAbility then
+                        smoothed[i] = newRecs[j]
+                        used[oldAbility] = true
+                        break
+                    end
+                end
             else
-                -- Find any unused new rec that won't move backward
-                for j = 1, #newRecs do
-                    local ab = newRecs[j].ability
-                    if not used[ab] and (not prev[ab] or i <= prev[ab]) then
-                        result[i] = newRecs[j]
-                        used[ab] = true
-                        break
+                -- Old ability gone or already used — accept new if not used
+                if newAbility and not used[newAbility] then
+                    smoothed[i] = newRecs[i]
+                    used[newAbility] = true
+                else
+                    -- Find any unused rec
+                    for j = 1, #newRecs do
+                        if not used[newRecs[j].ability] then
+                            smoothed[i] = newRecs[j]
+                            used[newRecs[j].ability] = true
+                            break
+                        end
                     end
                 end
-            end
-            -- Last resort: prefer abilities NOT in previous frame (truly new).
-            -- Only allow backward movement if absolutely nothing else available.
-            if not result[i] then
-                -- Try new abilities first (not in prev frame)
-                for j = 1, #newRecs do
-                    local ab = newRecs[j].ability
-                    if not used[ab] and not prev[ab] then
-                        result[i] = newRecs[j]
-                        used[ab] = true
-                        break
-                    end
-                end
-            end
-            if not result[i] then
-                for j = 1, #newRecs do
-                    if not used[newRecs[j].ability] then
-                        result[i] = newRecs[j]
-                        used[newRecs[j].ability] = true
-                        break
-                    end
-                end
+                smoothState.abilities[i] = smoothed[i] and smoothed[i].ability or nil
+                smoothState.changeTime[i] = now
             end
         end
     end
 
-    -- Track slots for next frame
-    smoothState.prevSlots = {}
-    for i = 1, 3 do
-        if result[i] then
-            smoothState.prevSlots[result[i].ability] = i
-        end
-    end
-
-    return result
+    return smoothed
 end
 
 function DH:UpdateRecommendations()
