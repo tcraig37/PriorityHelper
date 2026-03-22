@@ -2,6 +2,15 @@
 
 All notable changes to PriorityHelper will be documented in this file.
 
+## [1.8.0] - 2026-03-22
+
+### Added
+- **Rogue support**: Assassination, Combat, Subtlety rotation modes
+- Assassination: SnD/HfB maintenance, Envenom at 4-5 CP, Cut to the Chase SnD refresh, Mutilate builder
+- Combat: SnD maintenance, Rupture at 5 CP, Eviscerate finisher, Killing Spree/Adrenaline Rush at low energy, Sinister Strike builder with talent cost reduction
+- Subtlety: SnD maintenance, Shadow Dance with Ambush spam, Rupture/Eviscerate finishers, Hemorrhage builder
+- All specs: energy regen sim with getWaitTime for accurate lookahead
+
 ## [1.7.0] - 2026-03-22
 
 ### Added
