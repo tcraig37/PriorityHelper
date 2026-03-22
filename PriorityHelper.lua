@@ -270,6 +270,201 @@ function DH:SimInitTarget(simState, s)
 end
 
 -- ============================================================================
+-- CORE SIMULATION RUNNER
+-- Generic sim loop for all class rotations. Handles CD tracking, resource
+-- management, aura duration ticking, and recommendation building.
+--
+-- Config:
+--   gcdType       "melee" or "spell" (haste type for GCD calculation)
+--   maxRecs       Number of recommendations to produce (default 3)
+--   allowDupes    If true, same ability can appear in multiple recs (e.g., Wrath spam)
+--   cds           { abilityKey = "stateCooldownKey", ... }
+--   baseCDs       { abilityKey = seconds, ... }
+--   resources     { { field="energy", max="energy_max", regen=10 }, ... }
+--   auras         { { up="sr_up", remains="sr_remains" [, stacks="sr_stacks", clearStacks=true] }, ... }
+--   initState     function(sim, s) - copy class-specific state from real state
+--   getPriority   function(sim, recs) - return ability key (even if on CD) or nil
+--   onCast        function(sim, key) - apply ability effects to sim state
+--   getAdvanceTime function(sim, key) - return cast/channel time (default: sim.gcd)
+-- ============================================================================
+
+-- Internal: advance sim time by `seconds` — ticks CDs, resources, auras
+local function AdvanceSimTime(DH, sim, config, seconds)
+    if seconds <= 0 then return end
+
+    -- Tick all CDs
+    for k, v in pairs(sim.cd) do
+        sim.cd[k] = math.max(0, v - seconds)
+    end
+
+    -- Tick resources (energy regen, etc.)
+    if config.resources then
+        for _, res in ipairs(config.resources) do
+            if res.regen and res.regen > 0 then
+                local cur = sim[res.field] or 0
+                local cap = res.max and sim[res.max] or 999999
+                sim[res.field] = math.min(cap, cur + res.regen * seconds)
+            end
+        end
+    end
+
+    -- Tick aura durations
+    if config.auras then
+        for _, aura in ipairs(config.auras) do
+            local rem = sim[aura.remains]
+            if rem and rem > 0 then
+                rem = rem - seconds
+                if rem <= 0 then
+                    sim[aura.up] = false
+                    sim[aura.remains] = 0
+                    if aura.stacks and aura.clearStacks then
+                        sim[aura.stacks] = 0
+                    end
+                else
+                    sim[aura.remains] = rem
+                end
+            end
+        end
+    end
+
+    -- Tick mana
+    DH:SimTickMana(sim, seconds)
+
+    -- Class-specific tick
+    if config.tickTime then
+        config.tickTime(sim, seconds)
+    end
+end
+
+function DH:RunSimulation(s, config)
+    local recommendations = {}
+    local maxRecs = config.maxRecs or 3
+    local allowDupes = config.allowDupes or false
+
+    if not s.target.exists or not s.target.canAttack then
+        return recommendations
+    end
+
+    -- Build sim state
+    local sim = {}
+    self:SimInitGCD(sim, s, config.gcdType or "melee")
+    self:SimInitMana(sim, s)
+    self:SimInitTarget(sim, s)
+
+    -- Initialize resources from state
+    if config.resources then
+        for _, res in ipairs(config.resources) do
+            if res.initFrom then
+                sim[res.field] = res.initFrom(s)
+                if res.max and res.initMaxFrom then
+                    sim[res.max] = res.initMaxFrom(s)
+                end
+            end
+        end
+    end
+
+    -- Initialize CD tracking: sim.cd[key] = remaining seconds
+    sim.cd = {}
+    if config.cds then
+        for simKey, stateKey in pairs(config.cds) do
+            local cd = s.cooldown[stateKey]
+            sim.cd[simKey] = cd and cd.remains or 0
+        end
+    end
+
+    -- Let class copy its own state (buffs, procs, auras, etc.)
+    if config.initState then
+        config.initState(sim, s)
+    end
+
+    -- Account for current GCD
+    if sim.gcd_remains > 0 then
+        AdvanceSimTime(self, sim, config, sim.gcd_remains)
+        sim.gcd_remains = 0
+    end
+
+    -- Helper: is a CD ready?
+    sim.ready = function(self, key)
+        return (self.cd[key] or 0) <= 0
+    end
+
+    -- Helper: get CD remaining
+    sim.remains = function(self, key)
+        return self.cd[key] or 0
+    end
+
+    -- Sim loop
+    local iters = 0
+    while #recommendations < maxRecs and iters < 12 do
+        iters = iters + 1
+
+        local action = config.getPriority(sim, recommendations)
+
+        if not action then
+            -- Nothing to cast right now. If class provides getWaitTime,
+            -- advance time and loop back to try again (energy regen, etc.)
+            if config.getWaitTime then
+                local wait = config.getWaitTime(sim)
+                if wait and wait > 0 then
+                    AdvanceSimTime(self, sim, config, wait)
+                end
+            else
+                break
+            end
+        end
+
+        -- If we got an action (either directly or after waiting), process it
+        if action then
+            -- If the ability is on CD, advance time until it's ready
+            local cdRemaining = sim.cd[action] or 0
+            if cdRemaining > 0 then
+                AdvanceSimTime(self, sim, config, cdRemaining)
+            end
+
+            -- Add to recommendations (check dupes unless allowDupes)
+            local dominated = false
+            if not allowDupes then
+                for _, rec in ipairs(recommendations) do
+                    if rec.ability == action then
+                        dominated = true
+                        break
+                    end
+                end
+            end
+            if not dominated then
+                local ability = self.Class.abilities[action]
+                if ability then
+                    table.insert(recommendations, {
+                        ability = action,
+                        texture = ability.texture,
+                        name = ability.name,
+                    })
+                end
+            end
+
+            -- Set the ability's CD in sim
+            if sim.cd[action] ~= nil and config.baseCDs and config.baseCDs[action] then
+                sim.cd[action] = config.baseCDs[action]
+            end
+
+            -- Class-specific cast effects
+            if config.onCast then
+                config.onCast(sim, action)
+            end
+
+            -- Advance time by GCD or custom cast time
+            local advanceTime = sim.gcd
+            if config.getAdvanceTime then
+                advanceTime = config.getAdvanceTime(sim, action)
+            end
+            AdvanceSimTime(self, sim, config, advanceTime)
+        end
+    end
+
+    return recommendations
+end
+
+-- ============================================================================
 -- REGISTRATION API
 -- Class modules use these to register their data into the framework.
 -- ============================================================================

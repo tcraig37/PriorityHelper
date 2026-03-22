@@ -208,16 +208,19 @@ end
 -- Use the selected mode's rotation instead of spec-based dispatch
 -- ============================================================================
 
--- Smoothing: track when each slot last changed and resist unnecessary swaps
+-- Smoothing: Rec1 always shows the sim's top pick (no smoothing on slot 1).
+-- Slots 2-3 resist changing for SMOOTH_LOCK_DURATION to prevent stutter,
+-- unless the old ability is no longer in the recommendations at all.
 local smoothState = {
     abilities = {},     -- { [slot] = abilityKey }
     changeTime = {},    -- { [slot] = GetTime() when this slot last changed }
 }
-local SMOOTH_LOCK_DURATION = 0.3  -- Slot stays locked for this many seconds after changing
+local SMOOTH_LOCK_DURATION = 0.5
 
 local function SmoothRecommendations(newRecs)
     local now = GetTime()
     local smoothed = {}
+    local used = {}  -- Prevent same ability in multiple slots
 
     for i = 1, 3 do
         local newAbility = newRecs[i] and newRecs[i].ability or nil
@@ -225,40 +228,50 @@ local function SmoothRecommendations(newRecs)
         local lastChange = smoothState.changeTime[i] or 0
         local locked = (now - lastChange) < SMOOTH_LOCK_DURATION
 
-        if newAbility == oldAbility then
-            -- Same ability, keep it
+        -- Slot 1: always follow the sim — this is what to press NOW
+        if i == 1 or newAbility == oldAbility or not oldAbility or not locked then
             smoothed[i] = newRecs[i]
-        elseif not oldAbility or not locked then
-            -- Slot is empty, unlocked, or expired — accept the change
-            smoothed[i] = newRecs[i]
+            if newAbility then used[newAbility] = true end
             if newAbility ~= oldAbility then
                 smoothState.abilities[i] = newAbility
                 smoothState.changeTime[i] = now
             end
         else
-            -- Slot is locked — check if old ability is still in the new recs somewhere
-            -- If it is, keep it in this slot (resist the swap)
+            -- Slots 2-3 locked: keep old ability if still recommended AND not already used
             local oldStillValid = false
-            for j = 1, #newRecs do
-                if newRecs[j].ability == oldAbility then
-                    oldStillValid = true
-                    break
+            if not used[oldAbility] then
+                for j = 1, #newRecs do
+                    if newRecs[j].ability == oldAbility then
+                        oldStillValid = true
+                        break
+                    end
                 end
             end
 
             if oldStillValid then
-                -- Old ability still recommended, keep it in this slot
-                -- Find its data from newRecs
                 for j = 1, #newRecs do
                     if newRecs[j].ability == oldAbility then
                         smoothed[i] = newRecs[j]
+                        used[oldAbility] = true
                         break
                     end
                 end
             else
-                -- Old ability completely gone from recommendations — must change
-                smoothed[i] = newRecs[i]
-                smoothState.abilities[i] = newAbility
+                -- Old ability gone or already used — accept new if not used
+                if newAbility and not used[newAbility] then
+                    smoothed[i] = newRecs[i]
+                    used[newAbility] = true
+                else
+                    -- Find any unused rec
+                    for j = 1, #newRecs do
+                        if not used[newRecs[j].ability] then
+                            smoothed[i] = newRecs[j]
+                            used[newRecs[j].ability] = true
+                            break
+                        end
+                    end
+                end
+                smoothState.abilities[i] = smoothed[i] and smoothed[i].ability or nil
                 smoothState.changeTime[i] = now
             end
         end
