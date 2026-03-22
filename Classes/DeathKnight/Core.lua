@@ -264,9 +264,9 @@ local bloodConfig = {
             return "death_coil"
         end
 
-        -- Empower Rune Weapon (all runes depleted, big CD)
-        local totalRunes = sim.blood + sim.frost + sim.unholy + sim.death
-        if totalRunes == 0 and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
+        -- Empower Rune Weapon (no F/U/Death runes available)
+        if sim.frost == 0 and sim.unholy == 0 and sim.death == 0
+            and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
             return "empower_rune_weapon"
         end
 
@@ -433,7 +433,8 @@ local frostConfig = {
         end
 
         -- Blood Tap: convert Blood rune to Death when F/U depleted
-        if sim.blood > 0 and sim.frost == 0 and sim.unholy == 0 and sim.death == 0 then
+        if sim.blood > 0 and sim.frost == 0 and sim.unholy == 0 and sim.death == 0
+            and not sim:ready("empower_rune_weapon") then
             return "blood_tap"
         end
 
@@ -442,9 +443,9 @@ local frostConfig = {
             return "frost_strike"
         end
 
-        -- Empower Rune Weapon (all runes depleted, big CD)
-        local totalRunes = sim.blood + sim.frost + sim.unholy + sim.death
-        if totalRunes == 0 and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
+        -- Empower Rune Weapon (no F/U/Death runes available)
+        if sim.frost == 0 and sim.unholy == 0 and sim.death == 0
+            and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
             return "empower_rune_weapon"
         end
 
@@ -601,7 +602,8 @@ local unholyConfig = {
         end
 
         -- Blood Tap: convert Blood rune to Death when F/U depleted
-        if sim.blood > 0 and sim.frost == 0 and sim.unholy == 0 and sim.death == 0 then
+        if sim.blood > 0 and sim.frost == 0 and sim.unholy == 0 and sim.death == 0
+            and not sim:ready("empower_rune_weapon") then
             return "blood_tap"
         end
 
