@@ -6,7 +6,7 @@
 PriorityHelper = {}
 local DH = PriorityHelper
 
-DH.Version = "1.6.0"
+DH.Version = "1.7.0"
 
 -- Namespace for internal data
 local ns = {}

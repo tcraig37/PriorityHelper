@@ -2,6 +2,21 @@
 
 All notable changes to PriorityHelper will be documented in this file.
 
+## [1.7.0] - 2026-03-22
+
+### Added
+- **Death Knight support**: Blood (Tank), Frost (DPS), Unholy (DPS) rotation modes
+- Rune system: real-time rune tracking via GetRuneCooldown/GetRuneType with Death rune substitution
+- Rune recovery simulation: reads actual per-slot CD timers, recovers runes during sim lookahead
+- Haste-adjusted rune CDs using observed duration from game (matches AzerothCore formula)
+- Presence awareness: Blood recommends Frost Presence, Frost/Unholy recommend Unholy Presence
+- Presence form handlers via GetShapeshiftForm (same pattern as Warrior stances)
+- Disease management: Frost Fever/Blood Plague tracking with spec-appropriate refresh
+- Glyph of Disease: Pestilence refreshes both diseases (Blood <=4s, Frost <=3s thresholds per sim APL)
+- Unholy skips Pestilence for single target (matches uh_2h_ss APL)
+- Proc awareness: Killing Machine, Rime/Freezing Fog (free Howling Blast), Sudden Doom (free Death Coil)
+- Mode icons use presence textures (Blood=red, Frost=blue, Unholy=green)
+
 ## [1.6.0] - 2026-03-22
 
 ### Added
