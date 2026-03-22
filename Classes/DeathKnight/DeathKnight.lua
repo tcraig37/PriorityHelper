@@ -285,6 +285,7 @@ DH:RegisterBuffs({
     "dancing_rune_weapon",
     "unholy_frenzy",
     "desolation",
+    "summon_gargoyle",
 })
 
 -- Debuffs to track
@@ -349,7 +350,7 @@ DH:RegisterTalents({
     { 1, 22, "heart_strike" },
     { 1, 23, "might_of_mograine" },
     { 1, 24, "blood_gorged" },
-    { 1, 25, "dancing_rune_weapon" },
+    { 1, 28, "dancing_rune_weapon" },
 
     -- Frost
     { 2, 1, "improved_icy_touch" },
@@ -447,6 +448,7 @@ DH:RegisterBuffMap({
     [49028] = "dancing_rune_weapon",
     [49016] = "unholy_frenzy",
     [66803] = "desolation",
+    [49206] = "summon_gargoyle",
 })
 
 -- Debuff spell ID -> key mapping

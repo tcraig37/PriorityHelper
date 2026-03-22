@@ -258,6 +258,12 @@ local bloodConfig = {
             return "death_coil"
         end
 
+        -- Empower Rune Weapon (all runes depleted, big CD)
+        local totalRunes = sim.blood + sim.frost + sim.unholy + sim.death
+        if totalRunes == 0 and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
+            return "empower_rune_weapon"
+        end
+
         -- Horn of Winter (free GCD, RP generation)
         return "horn_of_winter"
     end,
@@ -283,6 +289,12 @@ local bloodConfig = {
             sim.sudden_doom = false
         elseif key == "dancing_rune_weapon" then
             spendRP(sim, 60)
+        elseif key == "empower_rune_weapon" then
+            sim.blood = 2
+            sim.frost = 2
+            sim.unholy = 2
+            sim.rp = math.min(sim.rp_max, sim.rp + 25)
+            sim.rune_recovery = { blood = {}, frost = {}, unholy = {}, death = {} }
         elseif key == "pestilence" then
             spendRunesTracked(sim, 1, 0, 0, 10)
             if sim.has_glyph_disease then
@@ -442,6 +454,12 @@ local frostConfig = {
             spendRunesTracked(sim, 1, 0, 0, 10)
         elseif key == "frost_strike" then
             spendRP(sim, sim.fs_cost)
+        elseif key == "empower_rune_weapon" then
+            sim.blood = 2
+            sim.frost = 2
+            sim.unholy = 2
+            sim.rp = math.min(sim.rp_max, sim.rp + 25)
+            sim.rune_recovery = { blood = {}, frost = {}, unholy = {}, death = {} }
         elseif key == "pestilence" then
             spendRunesTracked(sim, 1, 0, 0, 10)
             if sim.has_glyph_disease then
@@ -522,6 +540,7 @@ local unholyConfig = {
         sim.has_gargoyle = s.talent.summon_gargoyle.rank > 0
         sim.has_bone_shield = s.talent.bone_shield.rank > 0
         sim.in_unholy_presence = s.buff.unholy_presence.up
+        sim.gargoyle_up = s.buff.summon_gargoyle.up
     end,
     getPriority = function(sim, recs)
         -- Unholy DPS wants Unholy Presence
@@ -564,6 +583,11 @@ local unholyConfig = {
             return "death_coil"
         end
 
+        -- Empower Rune Weapon (Unholy: use during Gargoyle for max burst)
+        if sim.gargoyle_up and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
+            return "empower_rune_weapon"
+        end
+
         -- Horn of Winter (free GCD, RP gen)
         return "horn_of_winter"
     end,
@@ -589,6 +613,12 @@ local unholyConfig = {
             sim.sudden_doom = false
         elseif key == "summon_gargoyle" then
             spendRP(sim, 60)
+        elseif key == "empower_rune_weapon" then
+            sim.blood = 2
+            sim.frost = 2
+            sim.unholy = 2
+            sim.rp = math.min(sim.rp_max, sim.rp + 25)
+            sim.rune_recovery = { blood = {}, frost = {}, unholy = {}, death = {} }
         elseif key == "pestilence" then
             spendRunesTracked(sim, 1, 0, 0, 10)
             if sim.has_glyph_disease then
