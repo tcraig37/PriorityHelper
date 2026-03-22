@@ -1,42 +1,36 @@
 # PriorityHelper
 
-A priority rotation helper addon for World of Warcraft 3.3.5a (WotLK). Shows recommended abilities in real-time based on your current state, buffs, debuffs, and cooldowns.
+Priority rotation helper for World of Warcraft 3.3.5a (WotLK). Shows the next 3 recommended abilities in real-time.
 
-## Supported Classes
+## All 10 Classes Supported
 
-### Druid
-- **Cat (DPS)** — Full feral cat rotation with SR/Rip desync logic, Clearcasting, FF weaving
-- **Cat + Bearweave (DPS)** — Cat rotation with Lacerateweave during energy-starved windows
-- **Bear (Tank)** — Bear tank rotation with Lacerate/Mangle priority
-- **Boomkin (DPS)** — Balance rotation with ICD-aware Eclipse fishing (based on wowsim APL)
+| Class | Specs |
+|-------|-------|
+| Druid | Cat, Cat+Bearweave, Bear, Boomkin |
+| Paladin | Retribution, Protection |
+| Warlock | Affliction, Demonology, Destruction |
+| Shaman | Enhancement, Elemental |
+| Warrior | Arms, Fury, Protection |
+| Hunter | Beast Mastery, Marksmanship, Survival |
+| Death Knight | Blood, Frost, Unholy |
+| Rogue | Assassination, Combat, Subtlety |
+| Mage | Arcane, Fire, Frost |
+| Priest | Shadow |
 
-### Paladin
-- **Retribution (DPS)** — FCFS rotation: HoW > Judgement > CS > DS > Exorcism (AoW) > Consecration
-- **Protection (Tank)** — SoR/HotR interleave with Consecration, Holy Shield, and Judgement fill
+## Install
 
-## Installation
-
-1. Download or clone this repository
-2. Copy the `PriorityHelper` folder to your `Interface/AddOns` directory
-3. Restart WoW or `/reload`
+1. Copy `PriorityHelper` folder to `Interface/AddOns`
+2. `/reload`
 
 ## Usage
 
-Click the **minimap button** to select your rotation mode. The addon shows the next 3 recommended abilities when you have an attackable target.
+- Click the **minimap button** to select your rotation mode
+- Right-click the minimap button to detach and drag it freely
+- The addon shows 3 recommended abilities when you have an attackable target
 
-### Slash Commands
+## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/ph` | Show all commands |
-| `/ph toggle` | Enable/disable addon |
-| `/ph lock` | Lock/unlock display position |
-| `/ph reset` | Reset display position |
-| `/ph scale <0.5-2.0>` | Set display scale |
-| `/ph live` | Toggle live debug frame |
-| `/ph cat` | Show feral cat status |
-| `/ph bear` | Show bear/bearweave status |
-| `/ph minimap` | Toggle minimap button |
+`/ph` — Show all commands
 
 ## Requirements
 
