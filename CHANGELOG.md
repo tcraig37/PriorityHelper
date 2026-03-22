@@ -2,6 +2,14 @@
 
 All notable changes to PriorityHelper will be documented in this file.
 
+## [1.4.0] - 2026-03-22
+
+### Added
+- **Shaman support**: Enhancement (DPS) and Elemental (DPS) rotation modes
+- Enhancement: Feral Spirit, MW5 instant Lightning Bolt, Stormstrike, Flame Shock/Earth Shock with shared shock CD, Fire Nova, Lava Lash, Shamanistic Rage mana recovery
+- Elemental: Elemental Mastery, Flame Shock maintenance for Lava Burst auto-crit, Lava Burst on CD, Chain Lightning, Lightning Bolt filler with haste-adjusted cast times
+- Enhancement wait-for-CD logic: advances sim to nearest ability when nothing is ready
+
 ## [1.3.0] - 2026-03-22
 
 ### Added

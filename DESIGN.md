@@ -336,3 +336,4 @@ Rotations are based on:
 - **1.1.1** — Prot 969 rotation fix, Divine Plea, init reliability
 - **1.2.0** — Detachable minimap button (right-click to toggle), duplicate icon fix
 - **1.3.0** — Warlock added (Affliction, Demonology, Destruction), cast time awareness for caster rotations, haste-adjusted sim predictions
+- **1.4.0** — Shaman added (Enhancement, Elemental), shared shock CD handling, MW5 instant cast logic
