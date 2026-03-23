@@ -204,6 +204,9 @@ function state:Reset()
     self.inCombat = UnitAffectingCombat("player")
     ns.inCombat = self.inCombat
 
+    -- Movement detection
+    self.isMoving = (GetUnitSpeed("player") or 0) > 0
+
     -- Update GCD
     -- GetSpellCooldown returns (start, duration) — if a spell has no real CD,
     -- it returns the GCD. If it has a real CD, it returns whichever is longer.

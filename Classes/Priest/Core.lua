@@ -52,6 +52,7 @@ local shadowConfig = {
 
         -- Buffs
         sim.shadowform_up = s.buff.shadowform.up
+        sim.moving = s.isMoving
 
         -- Talents
         sim.has_vt = s.talent.vampiric_touch.rank > 0
@@ -81,6 +82,20 @@ local shadowConfig = {
         -- Shadowfiend for mana
         if sim.mana_pct < 30 and sim:ready("shadowfiend") and not DH:IsSnoozed("shadowfiend") then
             return "shadowfiend"
+        end
+
+        -- MOVING: prioritize instants first, then fall through to normal rotation
+        if sim.moving then
+            if not sim.dp_up and sim.ttd > 6 then
+                return "devouring_plague"
+            end
+            if (not sim.swp_up or sim.swp_remains < 2) and sim.ttd > 6 then
+                return "shadow_word_pain"
+            end
+            if sim:ready("shadow_word_death") then
+                return "shadow_word_death"
+            end
+            -- Fall through to stationary rotation for REC2/REC3
         end
 
         -- Vampiric Touch: maintain (cast time ~1.5s, refresh before it falls off)
