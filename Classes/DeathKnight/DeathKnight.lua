@@ -26,6 +26,7 @@ local SPELLS = {
     OBLITERATE = 51425,
     FROST_STRIKE = 55268,
     HOWLING_BLAST = 51411,
+    UNBREAKABLE_ARMOR = 51271,
 
     -- Unholy
     SCOURGE_STRIKE = 55271,
@@ -101,6 +102,11 @@ class.abilities = {
         id = SPELLS.HOWLING_BLAST,
         name = "Howling Blast",
         texture = 237533,
+    },
+    unbreakable_armor = {
+        id = SPELLS.UNBREAKABLE_ARMOR,
+        name = "Unbreakable Armor",
+        texture = 237510,
     },
 
     -- Unholy
@@ -289,8 +295,10 @@ DH:RegisterMeleeAbilities({
 DH:RegisterBuffs({
     "blood_presence", "frost_presence", "unholy_presence",
     "horn_of_winter",
+    "strength_of_earth_totem",
     "killing_machine",
     "freezing_fog",     -- Rime proc (free Howling Blast)
+    "unbreakable_armor",
     "sudden_doom",      -- Free Death Coil proc
     "bone_shield",
     "vampiric_blood",
@@ -316,6 +324,7 @@ DH:RegisterCooldowns({
     obliterate = 51425,
     frost_strike = 55268,
     howling_blast = 51411,
+    unbreakable_armor = 51271,
     scourge_strike = 55271,
     death_coil = 49895,
     heart_strike = 55262,
@@ -436,6 +445,7 @@ DH:RegisterGlyphs({
     [58631] = "icy_touch",
     [58657] = "obliterate",
     [58625] = "frost_strike",
+    [58647] = "frost_strike",
     [63331] = "howling_blast",
     [58642] = "scourge_strike",
     [58677] = "death_coil",
@@ -454,8 +464,10 @@ DH:RegisterBuffMap({
     [48266] = "frost_presence",
     [48265] = "unholy_presence",
     [57623] = "horn_of_winter",
+    [58643] = "strength_of_earth_totem",
     [51124] = "killing_machine",
     [59052] = "freezing_fog",
+    [51271] = "unbreakable_armor",
     [81340] = "sudden_doom",
     [49222] = "bone_shield",
     [55233] = "vampiric_blood",

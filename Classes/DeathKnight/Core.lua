@@ -61,6 +61,39 @@ local function diseasesUp(sim)
     return sim.ff_up and sim.bp_up
 end
 
+local function nextRuneReady(sim, runeType)
+    if not sim.rune_recovery or not sim.rune_recovery[runeType] then
+        return 999
+    end
+    local timers = sim.rune_recovery[runeType]
+    if timers[1] then
+        return timers[1]
+    end
+    return 999
+end
+
+-- Preserve a Blood/Death rune for Glyph of Disease refresh windows.
+-- If we spend the last Blood/Death rune too early, diseases can drop and force IT+PS.
+local function shouldReserveDiseaseRefreshRune(sim)
+    if not sim.has_glyph_disease or not diseasesUp(sim) then
+        return false
+    end
+
+    local availableBD = (sim.blood or 0) + (sim.death or 0)
+    if availableBD > 1 then
+        return false
+    end
+
+    local minDiseaseRemains = math.min(sim.ff_remains or 0, sim.bp_remains or 0)
+    if minDiseaseRemains > 8 then
+        return false
+    end
+
+    local timeUntilPestWindow = math.max(0, minDiseaseRemains - 3)
+    local nextBD = math.min(nextRuneReady(sim, "blood"), nextRuneReady(sim, "death"))
+    return nextBD > timeUntilPestWindow
+end
+
 -- ============================================================================
 -- RUNE RECOVERY TRACKING
 -- Reads actual rune cooldown timers to estimate when runes come back.
@@ -347,9 +380,15 @@ local frostConfig = {
     maxRecs = 3,
     allowDupes = true,
     cds = {
+        unbreakable_armor = "unbreakable_armor",
+        blood_tap = "blood_tap",
+        horn_of_winter = "horn_of_winter",
         empower_rune_weapon = "empower_rune_weapon",
     },
     baseCDs = {
+        unbreakable_armor = 60,
+        blood_tap = 60,
+        horn_of_winter = 20,
         empower_rune_weapon = 300,
     },
     auras = {
@@ -382,16 +421,25 @@ local frostConfig = {
         -- Talents
         sim.has_howling_blast = s.talent.howling_blast.rank > 0
         sim.has_frost_strike = s.talent.frost_strike.rank > 0
+        sim.has_unbreakable_armor = s.talent.unbreakable_armor.rank > 0
+        sim.unbreakable_armor_up = s.buff.unbreakable_armor.up
+        sim.horn_of_winter_up = s.buff.horn_of_winter.up
+        sim.strength_of_earth_totem_up = s.buff.strength_of_earth_totem.up
 
         -- Glyph of Frost Strike (32 RP instead of 40)
         sim.fs_cost = (s.glyph.frost_strike and s.glyph.frost_strike.enabled) and 32 or 40
         sim.has_glyph_disease = s.glyph.disease and s.glyph.disease.enabled
-        sim.in_unholy_presence = s.buff.unholy_presence.up
+        sim.in_blood_presence = s.buff.blood_presence.up
     end,
     getPriority = function(sim, recs)
-        -- Frost DPS wants Unholy Presence for haste
-        if not sim.in_unholy_presence then
-            return "unholy_presence"
+        -- Keep AP/STR raid buff up: Horn if neither Horn nor Strength of Earth is active
+        if not sim.horn_of_winter_up and not sim.strength_of_earth_totem_up then
+            return "horn_of_winter"
+        end
+
+        -- Frost DPS wants Blood Presence for damage
+        if not sim.in_blood_presence then
+            return "blood_presence"
         end
 
         -- Glyph of Disease: Pestilence refreshes both diseases (1 Blood rune)
@@ -412,6 +460,12 @@ local frostConfig = {
             return "plague_strike"
         end
 
+        -- Unbreakable Armor after presence and disease setup
+        if sim.has_unbreakable_armor and not sim.unbreakable_armor_up
+            and sim:ready("unbreakable_armor") and not DH:IsSnoozed("unbreakable_armor") then
+            return "unbreakable_armor"
+        end
+
         -- Rime proc: free Howling Blast (also applies FF)
         if sim.rime and sim.has_howling_blast then
             return "howling_blast"
@@ -427,34 +481,53 @@ local frostConfig = {
             return "obliterate"
         end
 
-        -- Blood Strike (Blood rune spender, converts to Death runes)
-        if canAfford(sim, 1, 0, 0) then
-            return "blood_strike"
-        end
-
-        -- Blood Tap: convert Blood rune to Death when F/U depleted
-        if sim.blood > 0 and sim.frost == 0 and sim.unholy == 0 and sim.death == 0
-            and not sim:ready("empower_rune_weapon") then
-            return "blood_tap"
-        end
-
         -- Frost Strike (RP dump)
         if sim.has_frost_strike and sim.rp >= sim.fs_cost then
             return "frost_strike"
         end
 
-        -- Empower Rune Weapon (no F/U/Death runes available)
-        if sim.frost == 0 and sim.unholy == 0 and sim.death == 0
+        -- Blood Tap: create a Death rune when exactly one Obliterate rune is missing.
+        -- This supports opener sequencing like IT -> PS -> UA -> BT -> OB.
+        if sim.blood > 0 and sim.death == 0
+            and ((sim.frost == 0 and sim.unholy > 0) or (sim.unholy == 0 and sim.frost > 0) or (sim.frost == 0 and sim.unholy == 0))
+            and diseasesUp(sim) and sim:ready("blood_tap") then
+            return "blood_tap"
+        end
+
+        -- Opener Pestilence sync: F+U spent after first OB, Blood rune still available,
+        -- ERW is ready (haven't used it yet). Dump the Blood rune on Pestilence to align
+        -- all rune timers before ERW resets everything. Requires Glyph of Disease.
+        if sim.has_glyph_disease and diseasesUp(sim)
+            and sim.frost == 0 and sim.unholy == 0
+            and sim.blood > 0
+            and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
+            return "pestilence"
+        end
+
+        -- Empower Rune Weapon: fire before Blood Strike when F/U/Blood are all gone and we
+        -- cannot reach an Obliterate (e.g. post-Pestilence opener: F:0,U:0,B:0,D:1 left)
+        if sim.frost == 0 and sim.unholy == 0 and sim.blood == 0
+            and not canAfford(sim, 0, 1, 1)
             and sim:ready("empower_rune_weapon") and not DH:IsSnoozed("empower_rune_weapon") then
             return "empower_rune_weapon"
         end
 
-        -- Horn of Winter (free GCD, RP gen)
-        return "horn_of_winter"
+        -- Blood Strike (Blood rune spender, converts to Death runes)
+        -- Keep one Blood/Death rune banked if Glyph of Disease refresh is approaching.
+        if canAfford(sim, 1, 0, 0) and not shouldReserveDiseaseRefreshRune(sim) then
+            return "blood_strike"
+        end
+
+        -- Horn of Winter (free GCD, RP gen) only if off cooldown
+        if sim:ready("horn_of_winter") then
+            return "horn_of_winter"
+        end
+
+        return nil
     end,
     onCast = function(sim, key)
-        if key == "unholy_presence" then
-            sim.in_unholy_presence = true
+        if key == "blood_presence" then
+            sim.in_blood_presence = true
         elseif key == "icy_touch" then
             spendRunesTracked(sim, 0, 1, 0, 10)
             sim.ff_up = true
@@ -473,6 +546,8 @@ local frostConfig = {
             sim.rime = false
             sim.ff_up = true
             sim.ff_remains = 15
+        elseif key == "unbreakable_armor" then
+            sim.unbreakable_armor_up = true
         elseif key == "blood_strike" then
             spendRunesTracked(sim, 1, 0, 0, 10)
         elseif key == "frost_strike" then
@@ -496,6 +571,7 @@ local frostConfig = {
             end
         elseif key == "horn_of_winter" then
             sim.rp = math.min(sim.rp_max, sim.rp + 10)
+            sim.horn_of_winter_up = true
         end
     end,
     tickTime = function(sim, seconds)
