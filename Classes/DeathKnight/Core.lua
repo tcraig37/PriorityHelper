@@ -433,7 +433,8 @@ local frostConfig = {
     end,
     getPriority = function(sim, recs)
         -- Keep AP/STR raid buff up: Horn if neither Horn nor Strength of Earth is active
-        if not sim.horn_of_winter_up and not sim.strength_of_earth_totem_up then
+        if not sim.horn_of_winter_up and not sim.strength_of_earth_totem_up
+            and sim:ready("horn_of_winter") then
             return "horn_of_winter"
         end
 
@@ -547,6 +548,8 @@ local frostConfig = {
             sim.ff_up = true
             sim.ff_remains = 15
         elseif key == "unbreakable_armor" then
+            spendRunesTracked(sim, 0, 1, 0, 0)
+            sim.rp = math.min(sim.rp_max, sim.rp + 10)
             sim.unbreakable_armor_up = true
         elseif key == "blood_strike" then
             spendRunesTracked(sim, 1, 0, 0, 10)

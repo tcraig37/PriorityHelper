@@ -452,9 +452,8 @@ DH:RegisterGlyphs({
     [58669] = "death_strike",
     [58671] = "heart_strike",
     [58680] = "rune_strike",
-    [63334] = "dancing_rune_weapon",
-    [58673] = "disease",
-    [63334] = "disease",
+    [63330] = "dancing_rune_weapon",
+    [64267] = "disease",
     [58676] = "horn_of_winter",
 })
 
@@ -464,6 +463,14 @@ DH:RegisterBuffMap({
     [48266] = "frost_presence",
     [48265] = "unholy_presence",
     [57623] = "horn_of_winter",
+    -- Strength of Earth (all ranks) so HoW suppression works regardless of aura rank
+    [8076] = "strength_of_earth_totem",
+    [8160] = "strength_of_earth_totem",
+    [8161] = "strength_of_earth_totem",
+    [10442] = "strength_of_earth_totem",
+    [25361] = "strength_of_earth_totem",
+    [25528] = "strength_of_earth_totem",
+    [57622] = "strength_of_earth_totem",
     [58643] = "strength_of_earth_totem",
     [51124] = "killing_machine",
     [59052] = "freezing_fog",
