@@ -242,6 +242,7 @@ for key, ability in pairs(class.abilities) do
     end
 end
 
+---Returns icon texture path for an ability key, with fallback question mark icon.
 function ns.GetAbilityTexture(key)
     local ability = class.abilities[key]
     if ability then
@@ -261,6 +262,7 @@ end
 DH:RegisterGCDSpell(SPELLS.ICY_TOUCH)
 
 -- Presence form handlers (GetShapeshiftForm: 1=Blood, 2=Frost, 3=Unholy)
+---Clears presence form auras before applying the currently active presence.
 local function ResetPresences(state)
     state.buff.blood_presence.expires = 0
     state.buff.blood_presence._isForm = true
@@ -453,7 +455,7 @@ DH:RegisterGlyphs({
     [58671] = "heart_strike",
     [58680] = "rune_strike",
     [63330] = "dancing_rune_weapon",
-    [64267] = "disease",
+    [63334] = "disease",
     [58676] = "horn_of_winter",
 })
 
@@ -548,6 +550,7 @@ DH:RegisterSnoozeable("empower_rune_weapon", 60)
 -- Rune slots: 1-2 Blood, 3-4 Unholy, 5-6 Frost (or Death runes)
 -- ============================================================================
 
+---Returns counts of ready blood, frost, unholy, and death runes.
 function ns.GetRuneCounts()
     local blood, frost, unholy, death = 0, 0, 0, 0
     for i = 1, 6 do
